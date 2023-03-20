@@ -1,6 +1,7 @@
 use crate::hashes::hash;
-use crate::types::*;
-use ed25519_dalek::{Keypair, Signer};
+use crate::types::{Output, Transaction};
+use sdk_authorization_ed25519_dalek::{authorize, Keypair};
+use sdk_types::{Address, GetAddress as _};
 use std::collections::HashMap;
 
 pub fn authorize_transaction(
@@ -8,21 +9,12 @@ pub fn authorize_transaction(
     spent_utxos: &[Output],
     transaction: Transaction,
 ) -> Transaction {
-    let authorizations: Vec<Authorization> = {
-        let transaction_hash_without_authorizations = hash(&transaction);
-        spent_utxos
-            .iter()
-            .map(|utxo| {
-                let address = utxo.get_address();
-                Authorization {
-                    public_key: keypairs[&address].public,
-                    signature: keypairs[&address].sign(&transaction_hash_without_authorizations),
-                }
-            })
-            .collect()
-    };
-    Transaction {
-        authorizations,
-        ..transaction
-    }
+    let addresses_keypairs: Vec<(Address, &Keypair)> = spent_utxos
+        .iter()
+        .map(|utxo| {
+            let address = utxo.get_address();
+            (address, &keypairs[&address])
+        })
+        .collect();
+    authorize(&addresses_keypairs, transaction).unwrap()
 }

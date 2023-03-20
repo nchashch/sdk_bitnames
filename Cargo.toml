@@ -9,9 +9,9 @@ edition = "2021"
 bitcoin = "0.29.2"
 blake2 = "0.10.6"
 digest = "0.10.6"
-ed25519-dalek = "1.0.1"
 fake = "2.5.0"
 hex = "0.4.3"
 rand = "0.7"
 sdk_types = { path = "../sdk_types" }
+sdk_authorization_ed25519_dalek = { path = "../sdk_authorization_ed25519_dalek" }
 serde = "1.0.157"

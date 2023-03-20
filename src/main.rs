@@ -38,13 +38,13 @@ fn main() {
         let salt: u32 = Faker.fake();
         let commitment = blake2b_hmac(&key, salt);
         let outputs = vec![
-            Output::Regular {
-                value: value_in - 10,
+            Output {
                 address: addresses[0],
+                content: Content::Value(value_in - 10),
             },
-            Output::Custom {
+            Output {
                 address: addresses[1],
-                custom: BitNamesOutput::Commitment { salt, commitment },
+                content: Content::Custom(BitNamesOutput::Commitment { salt, commitment }),
             },
         ];
         let unsigned_transaction = Transaction {
@@ -67,9 +67,9 @@ fn main() {
         };
         let spent_utxos = vec![validator.utxos[&commitment_outpoint].clone()];
         let inputs = vec![commitment_outpoint];
-        let outputs = vec![Output::Custom {
+        let outputs = vec![Output {
             address: addresses[2],
-            custom: BitNamesOutput::Name { key, value },
+            content: Content::Custom(BitNamesOutput::Name { key, value }),
         }];
         let unsigned_transaction = Transaction {
             inputs,

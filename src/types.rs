@@ -1,6 +1,7 @@
 use crate::hashes::*;
+use sdk_authorization_ed25519_dalek::Authorization;
 use sdk_types::*;
-pub use sdk_types::{Address, Authorization, OutPoint};
+pub use sdk_types::{Address, Content, OutPoint};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -11,8 +12,8 @@ pub enum BitNamesOutput {
 }
 
 pub type Output = sdk_types::Output<BitNamesOutput>;
-pub type Transaction = sdk_types::Transaction<BitNamesOutput>;
-pub type Body = sdk_types::Body<BitNamesOutput>;
+pub type Transaction = sdk_types::Transaction<Authorization, BitNamesOutput>;
+pub type Body = sdk_types::Body<Authorization, BitNamesOutput>;
 
 impl GetValue for BitNamesOutput {
     #[inline(always)]

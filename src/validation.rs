@@ -1,7 +1,8 @@
-use crate::types::*;
 use crate::hashes::*;
+use crate::types::*;
+use sdk_authorization_ed25519_dalek::{verify_authorizations, Authorization};
+use sdk_types::{CustomValidator, OutPoint, Validator};
 use std::collections::HashMap;
-use sdk_types::{OutPoint, Validator, CustomValidator};
 
 #[derive(Debug)]
 pub struct BitNamesValidator {
@@ -16,6 +17,9 @@ impl BitNamesValidator {
             .iter()
             .map(|input| self.utxos[input].clone())
             .collect();
+        if verify_authorizations(&[transaction.clone()]).is_err() {
+            return Err("invalid authorizations".into());
+        }
         self.validate_transaction(&spent_utxos, transaction)
     }
 
@@ -34,11 +38,8 @@ impl BitNamesValidator {
                 vout: vout as u32,
             };
             let output = transaction.outputs[vout].clone();
-            match &output {
-                Output::Custom {
-                    custom: BitNamesOutput::Name { key, value },
-                    ..
-                } => {
+            match &output.content {
+                Content::Custom(BitNamesOutput::Name { key, value }) => {
                     self.key_to_value.insert(*key, *value);
                     println!("key {key} was registered successfuly");
                 }
@@ -50,7 +51,7 @@ impl BitNamesValidator {
     }
 }
 
-impl CustomValidator<BitNamesOutput> for BitNamesValidator {
+impl CustomValidator<Authorization, BitNamesOutput> for BitNamesValidator {
     fn custom_validate_transaction(
         &self,
         spent_utxos: &[Output],
@@ -58,22 +59,18 @@ impl CustomValidator<BitNamesOutput> for BitNamesValidator {
     ) -> Result<(), String> {
         let spent_commitments: Vec<(u32, Commitment)> = spent_utxos
             .iter()
-            .filter_map(|utxo| match utxo {
-                Output::Custom {
-                    custom: BitNamesOutput::Commitment { salt, commitment },
-                    ..
-                } => Some((*salt, *commitment)),
+            .filter_map(|utxo| match utxo.content {
+                Content::Custom(BitNamesOutput::Commitment { salt, commitment }) => {
+                    Some((salt, commitment))
+                }
                 _ => None,
             })
             .collect();
         let name_outputs = transaction
             .outputs
             .iter()
-            .filter_map(|output| match output {
-                Output::Custom {
-                    custom: BitNamesOutput::Name { key, value },
-                    ..
-                } => Some((key, value)),
+            .filter_map(|output| match output.content {
+                Content::Custom(BitNamesOutput::Name { key, value }) => Some((key, value)),
                 _ => None,
             });
         if spent_commitments.len() > 1 {
@@ -81,10 +78,10 @@ impl CustomValidator<BitNamesOutput> for BitNamesValidator {
         }
         for (key, _) in name_outputs {
             let (salt, commitment) = spent_commitments[0];
-            if blake2b_hmac(key, salt) != commitment {
+            if blake2b_hmac(&key, salt) != commitment {
                 return Err("invalid name commitment".into());
             }
-            if self.key_to_value.contains_key(key) {
+            if self.key_to_value.contains_key(&key) {
                 return Err(format!("key {key} was already registered"));
             }
         }
@@ -92,4 +89,4 @@ impl CustomValidator<BitNamesOutput> for BitNamesValidator {
     }
 }
 
-impl Validator<BitNamesOutput> for BitNamesValidator {}
+impl Validator<Authorization, BitNamesOutput> for BitNamesValidator {}

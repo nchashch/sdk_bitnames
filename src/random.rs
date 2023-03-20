@@ -1,15 +1,15 @@
 use bitcoin::hashes::Hash as _;
-use ed25519_dalek::Keypair;
 use fake::{Fake, Faker};
-use std::collections::HashMap;
+use sdk_authorization_ed25519_dalek::{get_address, Keypair};
 use sdk_types::*;
+use std::collections::HashMap;
 
 pub fn random_keypairs(num_keypairs: usize) -> HashMap<Address, Keypair> {
     let mut csprng = rand::thread_rng();
     (0..num_keypairs)
         .map(|_| {
             let keypair = Keypair::generate(&mut csprng);
-            (Address::from(keypair.public), keypair)
+            (get_address(&keypair.public), keypair)
         })
         .collect()
 }
@@ -29,9 +29,9 @@ pub fn random_deposits<C>(
             };
             let output = {
                 let index: usize = (0..addresses.len()).fake();
-                Output::Regular {
+                Output {
                     address: addresses[index],
-                    value,
+                    content: Content::Value(value),
                 }
             };
             (outpoint, output)
