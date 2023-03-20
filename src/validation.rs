@@ -8,7 +8,6 @@ use std::collections::HashMap;
 #[derive(Debug)]
 pub struct BitNamesState {
     pub key_to_value: HashMap<Key, Value>,
-    pub utxos: HashMap<OutPoint, Output>,
 }
 
 impl State<Authorization, BitNamesOutput> for BitNamesState {
@@ -67,40 +66,7 @@ impl State<Authorization, BitNamesOutput> for BitNamesState {
     }
 }
 
-impl BitNamesState {
-    fn validate_tx(&self, transaction: &Transaction) -> Result<u64, Error> {
-        let spent_utxos: Vec<Output> = transaction
-            .inputs
-            .iter()
-            .map(|input| self.utxos[input].clone())
-            .collect();
-        verify_authorizations(&[transaction.clone()])?;
-        self.validate_transaction(&spent_utxos, transaction)?;
-        Ok(validate_transaction(&spent_utxos, transaction)?)
-    }
-
-    pub fn execute_transaction(&mut self, transaction: &Transaction) -> Result<(), Error> {
-        self.validate_tx(transaction)?;
-        println!();
-        println!("--- EXECUTING TRANSACTION {} ---", transaction.txid());
-        println!();
-        for input in &transaction.inputs {
-            self.utxos.remove(input);
-        }
-        let txid = transaction.txid();
-        self.connect_outputs(&transaction.outputs)?;
-        for vout in 0..transaction.outputs.len() {
-            let outpoint = OutPoint::Regular {
-                txid,
-                vout: vout as u32,
-            };
-            let output = transaction.outputs[vout].clone();
-            self.utxos.insert(outpoint, output);
-        }
-        Ok(())
-    }
-}
-
+#[derive(Default)]
 pub struct Utxos<C, A, S, E> {
     pub utxos: HashMap<OutPoint, sdk_types::Output<C>>,
     phantom: std::marker::PhantomData<(A, S, E)>,
@@ -113,7 +79,14 @@ impl<
         E: From<S::Error> + From<sdk_types::Error>,
     > Utxos<C, A, S, E>
 {
-    fn validate_transaction(
+    pub fn new(utxos: HashMap<OutPoint, sdk_types::Output<C>>) -> Self {
+        Self {
+            utxos,
+            phantom: Default::default(),
+        }
+    }
+
+    pub fn validate_transaction(
         &self,
         state: &S,
         transaction: &sdk_types::Transaction<A, C>,
@@ -123,7 +96,8 @@ impl<
             .iter()
             .map(|input| self.utxos[input].clone())
             .collect();
-        Ok(validate_transaction(&spent_utxos, &transaction)?)
+        state.validate_transaction(&spent_utxos, transaction)?;
+        Ok(validate_transaction(&spent_utxos, transaction)?)
     }
 
     pub fn connect_transaction(

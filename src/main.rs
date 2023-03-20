@@ -30,10 +30,15 @@ fn main() {
     let value: Value = hash(&"151.101.193.164").into();
 
     let mut state = BitNamesState {
-        utxos,
         key_to_value: HashMap::new(),
         //key_to_value: HashMap::from([(key, [0; 32].into())]),
     };
+    let mut utxos: Utxos<
+        types::BitNamesOutput,
+        sdk_authorization_ed25519_dalek::Authorization,
+        validation::BitNamesState,
+        validation::Error,
+    > = Utxos::new(utxos);
     let commitment_transaction = {
         let salt: u64 = Faker.fake();
         let commitment = blake2b_hmac(&key, salt);
@@ -56,14 +61,16 @@ fn main() {
     };
 
     dbg!(&state);
-    state.execute_transaction(&commitment_transaction).unwrap();
+    utxos
+        .connect_transaction(&mut state, &commitment_transaction)
+        .unwrap();
 
     let name_transaction = {
         let commitment_outpoint = OutPoint::Regular {
             txid: commitment_transaction.txid(),
             vout: 1,
         };
-        let spent_utxos = vec![state.utxos[&commitment_outpoint].clone()];
+        let spent_utxos = vec![utxos.utxos[&commitment_outpoint].clone()];
         let inputs = vec![commitment_outpoint];
         let outputs = vec![Output {
             address: addresses[2],
@@ -77,7 +84,9 @@ fn main() {
         authorize_transaction(&keypairs, &spent_utxos, unsigned_transaction)
     };
     dbg!(&state);
-    state.execute_transaction(&name_transaction).unwrap();
+    utxos
+        .connect_transaction(&mut state, &name_transaction)
+        .unwrap();
     dbg!(&state);
 
     let mut nameserver = NameServer::default();
