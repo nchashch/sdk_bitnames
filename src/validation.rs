@@ -5,7 +5,7 @@ use sdk_types::{validate_transaction, GetAddress, GetValue, MerkleRoot, OutPoint
 use serde::Serialize;
 use std::collections::HashMap;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct BitNamesState {
     pub key_to_value: HashMap<Key, Value>,
 }
@@ -66,7 +66,7 @@ impl State<Authorization, BitNamesOutput> for BitNamesState {
     }
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct Utxos<C, A, S, E> {
     pub utxos: HashMap<OutPoint, sdk_types::Output<C>>,
     phantom: std::marker::PhantomData<(A, S, E)>,
@@ -105,7 +105,6 @@ impl<
         state: &mut S,
         transaction: &sdk_types::Transaction<A, C>,
     ) -> Result<(), E> {
-        self.validate_transaction(state, transaction)?;
         println!();
         println!("--- CONNECTING TRANSACTION {} ---", transaction.txid());
         println!();
@@ -148,4 +147,31 @@ pub enum BitNamesError {
     },
     #[error("key {key} was already registered")]
     KeyAlreadyRegistered { key: Key },
+}
+
+#[derive(Debug)]
+pub struct BitNamesNode {
+    pub utxos:
+        Utxos<BitNamesOutput, sdk_authorization_ed25519_dalek::Authorization, BitNamesState, Error>,
+    pub state: BitNamesState,
+}
+
+impl BitNamesNode {
+    pub fn new(utxos: HashMap<OutPoint, Output>) -> Self {
+        let utxos = Utxos::new(utxos);
+        Self {
+            utxos,
+            state: Default::default(),
+        }
+    }
+
+    pub fn validate_transaction(&self, transaction: &Transaction) -> Result<u64, Error> {
+        verify_authorizations(&[transaction.clone()])?;
+        self.utxos.validate_transaction(&self.state, transaction)
+    }
+
+    pub fn connect_transaction(&mut self, transaction: &Transaction) -> Result<(), Error> {
+        self.validate_transaction(transaction)?;
+        self.utxos.connect_transaction(&mut self.state, transaction)
+    }
 }

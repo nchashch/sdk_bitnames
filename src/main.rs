@@ -29,16 +29,7 @@ fn main() {
     let key: Key = hash(&"nytimes.com").into();
     let value: Value = hash(&"151.101.193.164").into();
 
-    let mut state = BitNamesState {
-        key_to_value: HashMap::new(),
-        //key_to_value: HashMap::from([(key, [0; 32].into())]),
-    };
-    let mut utxos: Utxos<
-        types::BitNamesOutput,
-        sdk_authorization_ed25519_dalek::Authorization,
-        validation::BitNamesState,
-        validation::Error,
-    > = Utxos::new(utxos);
+    let mut node = BitNamesNode::new(utxos);
     let commitment_transaction = {
         let salt: u64 = Faker.fake();
         let commitment = blake2b_hmac(&key, salt);
@@ -60,18 +51,17 @@ fn main() {
         authorize_transaction(&keypairs, &spent_utxos, unsigned_transaction)
     };
 
-    dbg!(&state);
-    utxos
-        .connect_transaction(&mut state, &commitment_transaction)
-        .unwrap();
+    dbg!(&node);
+    node.connect_transaction(&commitment_transaction).unwrap();
 
     let name_transaction = {
         let commitment_outpoint = OutPoint::Regular {
             txid: commitment_transaction.txid(),
             vout: 1,
         };
-        let spent_utxos = vec![utxos.utxos[&commitment_outpoint].clone()];
+        let spent_utxos = vec![node.utxos.utxos[&commitment_outpoint].clone()];
         let inputs = vec![commitment_outpoint];
+        let wrong_key: Key = hash(&"NyTimes.com").into();
         let outputs = vec![Output {
             address: addresses[2],
             content: Content::Custom(BitNamesOutput::Name { key, value }),
@@ -83,16 +73,14 @@ fn main() {
         };
         authorize_transaction(&keypairs, &spent_utxos, unsigned_transaction)
     };
-    dbg!(&state);
-    utxos
-        .connect_transaction(&mut state, &name_transaction)
-        .unwrap();
-    dbg!(&state);
+    dbg!(&node);
+    node.connect_transaction(&name_transaction).unwrap();
+    dbg!(&node);
 
     let mut nameserver = NameServer::default();
     nameserver
-        .store(&state, "nytimes.com", "151.101.193.164")
+        .store(&node.state, "nytimes.com", "151.101.193.164")
         .unwrap();
-    let value = nameserver.lookup(&state, "nytimes.com").unwrap();
+    let value = nameserver.lookup(&node.state, "nytimes.com").unwrap();
     dbg!(value);
 }
