@@ -28,10 +28,10 @@ fn main() {
 
     let key: Key = hash(&"nytimes.com").into();
     let value: Value = hash(&"151.101.193.164").into();
+    let salt: u64 = Faker.fake();
 
     let mut node = BitNamesNode::new(utxos);
     let commitment_transaction = {
-        let salt: u64 = Faker.fake();
         let commitment = blake2b_hmac(&key, salt);
         let outputs = vec![
             Output {
@@ -40,7 +40,7 @@ fn main() {
             },
             Output {
                 address: addresses[1],
-                content: Content::Custom(BitNamesOutput::Commitment { salt, commitment }),
+                content: Content::Custom(BitNamesOutput::Commitment(commitment)),
             },
         ];
         let unsigned_transaction = Transaction {
@@ -64,7 +64,7 @@ fn main() {
         let wrong_key: Key = hash(&"NyTimes.com").into();
         let outputs = vec![Output {
             address: addresses[2],
-            content: Content::Custom(BitNamesOutput::Name { key, value }),
+            content: Content::Custom(BitNamesOutput::Reveal { salt, key, value }),
         }];
         let unsigned_transaction = Transaction {
             inputs,

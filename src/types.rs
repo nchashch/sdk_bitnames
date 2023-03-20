@@ -7,8 +7,8 @@ use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BitNamesOutput {
-    Commitment { salt: u64, commitment: Commitment },
-    Name { key: Key, value: Value },
+    Commitment(Commitment),
+    Reveal { salt: u64, key: Key, value: Value },
 }
 
 pub type Output = sdk_types::Output<BitNamesOutput>;

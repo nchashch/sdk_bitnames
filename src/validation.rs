@@ -18,12 +18,10 @@ impl State<Authorization, BitNamesOutput> for BitNamesState {
         spent_utxos: &[Output],
         transaction: &Transaction,
     ) -> Result<(), Self::Error> {
-        let spent_commitments: Vec<(u64, Commitment)> = spent_utxos
+        let spent_commitments: Vec<Commitment> = spent_utxos
             .iter()
             .filter_map(|utxo| match utxo.content {
-                Content::Custom(BitNamesOutput::Commitment { salt, commitment }) => {
-                    Some((salt, commitment))
-                }
+                Content::Custom(BitNamesOutput::Commitment(commitment)) => Some(commitment),
                 _ => None,
             })
             .collect();
@@ -31,14 +29,16 @@ impl State<Authorization, BitNamesOutput> for BitNamesState {
             .outputs
             .iter()
             .filter_map(|output| match output.content {
-                Content::Custom(BitNamesOutput::Name { key, value }) => Some((key, value)),
+                Content::Custom(BitNamesOutput::Reveal { salt, key, value }) => {
+                    Some((salt, key, value))
+                }
                 _ => None,
             });
         if spent_commitments.len() > 1 {
             return Err(BitNamesError::MoreThanOneCommitment);
         }
-        for (key, _) in name_outputs {
-            let (salt, commitment) = spent_commitments[0];
+        for (salt, key, _) in name_outputs {
+            let commitment = spent_commitments[0];
             if blake2b_hmac(&key, salt) != commitment {
                 return Err(BitNamesError::InvalidNameCommitment {
                     key,
@@ -55,7 +55,7 @@ impl State<Authorization, BitNamesOutput> for BitNamesState {
     fn connect_outputs(&mut self, outputs: &[Output]) -> Result<(), Self::Error> {
         for output in outputs {
             match &output.content {
-                Content::Custom(BitNamesOutput::Name { key, value }) => {
+                Content::Custom(BitNamesOutput::Reveal { key, value, .. }) => {
                     self.key_to_value.insert(*key, *value);
                     println!("key {key} was registered successfuly");
                 }
