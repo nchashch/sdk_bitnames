@@ -35,7 +35,7 @@ fn main() {
         //key_to_value: HashMap::from([(key, [0; 32].into())]),
     };
     let commitment_transaction = {
-        let salt: u32 = Faker.fake();
+        let salt: u64 = Faker.fake();
         let commitment = blake2b_hmac(&key, salt);
         let outputs = vec![
             Output {
@@ -56,9 +56,7 @@ fn main() {
     };
 
     dbg!(&state);
-    state
-        .execute_transaction(&commitment_transaction)
-        .unwrap();
+    state.execute_transaction(&commitment_transaction).unwrap();
 
     let name_transaction = {
         let commitment_outpoint = OutPoint::Regular {

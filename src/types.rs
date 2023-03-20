@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BitNamesOutput {
-    Commitment { salt: u32, commitment: Commitment },
+    Commitment { salt: u64, commitment: Commitment },
     Name { key: Key, value: Value },
 }
 

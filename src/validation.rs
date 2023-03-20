@@ -19,7 +19,7 @@ impl State<Authorization, BitNamesOutput> for BitNamesState {
         spent_utxos: &[Output],
         transaction: &Transaction,
     ) -> Result<(), Self::Error> {
-        let spent_commitments: Vec<(u32, Commitment)> = spent_utxos
+        let spent_commitments: Vec<(u64, Commitment)> = spent_utxos
             .iter()
             .filter_map(|utxo| match utxo.content {
                 Content::Custom(BitNamesOutput::Commitment { salt, commitment }) => {
@@ -169,7 +169,7 @@ pub enum BitNamesError {
     #[error("invalid name commitment")]
     InvalidNameCommitment {
         key: Key,
-        salt: u32,
+        salt: u64,
         commitment: Commitment,
     },
     #[error("key {key} was already registered")]

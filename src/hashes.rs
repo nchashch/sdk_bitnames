@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 pub use sdk_types::hash;
+use serde::{Deserialize, Serialize};
 
 type Hash = [u8; 32];
 
@@ -104,7 +104,7 @@ impl<'a> From<&'a Commitment> for &'a Hash {
 
 use digest::FixedOutput;
 
-pub fn blake2b_hmac(key: &Key, salt: u32) -> Commitment {
+pub fn blake2b_hmac(key: &Key, salt: u64) -> Commitment {
     let salt = salt.to_be_bytes();
     let key: &[u8; 32] = key.into();
     let commitment: [u8; 32] =
