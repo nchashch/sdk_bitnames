@@ -29,7 +29,7 @@ fn main() {
     let key: Key = hash(&"nytimes.com").into();
     let value: Value = hash(&"151.101.193.164").into();
 
-    let mut validator = BitNamesValidator {
+    let mut state = BitNamesState {
         utxos,
         key_to_value: HashMap::new(),
         //key_to_value: HashMap::from([(key, [0; 32].into())]),
@@ -55,8 +55,8 @@ fn main() {
         authorize_transaction(&keypairs, &spent_utxos, unsigned_transaction)
     };
 
-    dbg!(&validator);
-    validator
+    dbg!(&state);
+    state
         .execute_transaction(&commitment_transaction)
         .unwrap();
 
@@ -65,7 +65,7 @@ fn main() {
             txid: commitment_transaction.txid(),
             vout: 1,
         };
-        let spent_utxos = vec![validator.utxos[&commitment_outpoint].clone()];
+        let spent_utxos = vec![state.utxos[&commitment_outpoint].clone()];
         let inputs = vec![commitment_outpoint];
         let outputs = vec![Output {
             address: addresses[2],
@@ -78,14 +78,14 @@ fn main() {
         };
         authorize_transaction(&keypairs, &spent_utxos, unsigned_transaction)
     };
-    dbg!(&validator);
-    validator.execute_transaction(&name_transaction).unwrap();
-    dbg!(&validator);
+    dbg!(&state);
+    state.execute_transaction(&name_transaction).unwrap();
+    dbg!(&state);
 
     let mut nameserver = NameServer::default();
     nameserver
-        .store(&validator, "nytimes.com", "151.101.193.164")
+        .store(&state, "nytimes.com", "151.101.193.164")
         .unwrap();
-    let value = nameserver.lookup(&validator, "nytimes.com").unwrap();
+    let value = nameserver.lookup(&state, "nytimes.com").unwrap();
     dbg!(value);
 }

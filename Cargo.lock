@@ -368,6 +368,7 @@ dependencies = [
  "sdk_authorization_ed25519_dalek",
  "sdk_types",
  "serde",
+ "thiserror",
 ]
 
 [[package]]
@@ -382,6 +383,7 @@ dependencies = [
  "hex",
  "rand 0.7.3",
  "serde",
+ "thiserror",
 ]
 
 [[package]]

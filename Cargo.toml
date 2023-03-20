@@ -15,3 +15,4 @@ rand = "0.7"
 sdk_types = { path = "../sdk_types" }
 sdk_authorization_ed25519_dalek = { path = "../sdk_authorization_ed25519_dalek" }
 serde = "1.0.157"
+thiserror = "1.0.40"
