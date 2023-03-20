@@ -1,7 +1,7 @@
 use crate::hashes::*;
 use crate::types::*;
 use sdk_authorization_ed25519_dalek::{verify_authorizations, Authorization};
-use sdk_types::{CustomValidator, OutPoint, Validator};
+use sdk_types::{validate_transaction, MerkleRoot, OutPoint, State};
 use std::collections::HashMap;
 
 #[derive(Debug)]
@@ -10,53 +10,16 @@ pub struct BitNamesValidator {
     pub utxos: HashMap<OutPoint, Output>,
 }
 
-impl BitNamesValidator {
-    fn validate_tx(&self, transaction: &Transaction) -> Result<u64, String> {
-        let spent_utxos: Vec<Output> = transaction
-            .inputs
-            .iter()
-            .map(|input| self.utxos[input].clone())
-            .collect();
-        if verify_authorizations(&[transaction.clone()]).is_err() {
-            return Err("invalid authorizations".into());
-        }
-        self.validate_transaction(&spent_utxos, transaction)
-    }
+impl State for BitNamesValidator {
+    type Authorization = Authorization;
+    type Custom = BitNamesOutput;
+    type Error = String;
 
-    pub fn execute_transaction(&mut self, transaction: &Transaction) -> Result<(), String> {
-        self.validate_tx(transaction)?;
-        println!();
-        println!("--- EXECUTING TRANSACTION {} ---", transaction.txid());
-        println!();
-        for input in &transaction.inputs {
-            self.utxos.remove(input);
-        }
-        let txid = transaction.txid();
-        for vout in 0..transaction.outputs.len() {
-            let outpoint = OutPoint::Regular {
-                txid,
-                vout: vout as u32,
-            };
-            let output = transaction.outputs[vout].clone();
-            match &output.content {
-                Content::Custom(BitNamesOutput::Name { key, value }) => {
-                    self.key_to_value.insert(*key, *value);
-                    println!("key {key} was registered successfuly");
-                }
-                _ => {}
-            }
-            self.utxos.insert(outpoint, output);
-        }
-        Ok(())
-    }
-}
-
-impl CustomValidator<Authorization, BitNamesOutput> for BitNamesValidator {
-    fn custom_validate_transaction(
+    fn validate_transaction(
         &self,
         spent_utxos: &[Output],
         transaction: &Transaction,
-    ) -> Result<(), String> {
+    ) -> Result<(), Self::Error> {
         let spent_commitments: Vec<(u32, Commitment)> = spent_utxos
             .iter()
             .filter_map(|utxo| match utxo.content {
@@ -87,6 +50,52 @@ impl CustomValidator<Authorization, BitNamesOutput> for BitNamesValidator {
         }
         Ok(())
     }
+    fn connect_outputs(&mut self, outputs: &[Output]) -> Result<(), Self::Error> {
+        for output in outputs {
+            match &output.content {
+                Content::Custom(BitNamesOutput::Name { key, value }) => {
+                    self.key_to_value.insert(*key, *value);
+                    println!("key {key} was registered successfuly");
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
 }
 
-impl Validator<Authorization, BitNamesOutput> for BitNamesValidator {}
+impl BitNamesValidator {
+    fn validate_tx(&self, transaction: &Transaction) -> Result<u64, String> {
+        let spent_utxos: Vec<Output> = transaction
+            .inputs
+            .iter()
+            .map(|input| self.utxos[input].clone())
+            .collect();
+        if verify_authorizations(&[transaction.clone()]).is_err() {
+            return Err("invalid authorizations".into());
+        }
+        self.validate_transaction(&spent_utxos, transaction)?;
+        validate_transaction(&spent_utxos, transaction)
+    }
+
+    pub fn execute_transaction(&mut self, transaction: &Transaction) -> Result<(), String> {
+        self.validate_tx(transaction)?;
+        println!();
+        println!("--- EXECUTING TRANSACTION {} ---", transaction.txid());
+        println!();
+        for input in &transaction.inputs {
+            self.utxos.remove(input);
+        }
+        let txid = transaction.txid();
+        self.connect_outputs(&transaction.outputs)?;
+        for vout in 0..transaction.outputs.len() {
+            let outpoint = OutPoint::Regular {
+                txid,
+                vout: vout as u32,
+            };
+            let output = transaction.outputs[vout].clone();
+            self.utxos.insert(outpoint, output);
+        }
+        Ok(())
+    }
+}
