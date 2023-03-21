@@ -1,9 +1,7 @@
 use crate::hashes::*;
 use crate::types::*;
-use sdk_authorization_ed25519_dalek::{verify_authorizations, Authorization};
-use sdk_types::{
-    validate_body, validate_transaction, GetAddress, GetValue, MerkleRoot, OutPoint, State,
-};
+use sdk_authorization_ed25519_dalek::verify_authorizations;
+use sdk_types::{validate_body, validate_transaction, GetAddress, GetValue, OutPoint, State};
 use serde::Serialize;
 use std::collections::HashMap;
 
@@ -54,14 +52,33 @@ impl State<BitNamesOutput> for BitNamesState {
         }
         Ok(())
     }
-    fn connect_outputs(&mut self, outputs: &[Output]) -> Result<(), Self::Error> {
-        for output in outputs {
-            match &output.content {
-                Content::Custom(BitNamesOutput::Reveal { key, value, .. }) => {
-                    self.key_to_value.insert(*key, *value);
-                    println!("key {key} was registered successfuly");
+    fn validate_body<A>(
+        &self,
+        spent_utxos: &[Output],
+        block_number: u32,
+        body: &sdk_types::Body<A, BitNamesOutput>,
+    ) -> Result<(), Self::Error> {
+        let mut index = 0;
+        for transaction in &body.transactions {
+            let spent_utxos = &spent_utxos[index..transaction.inputs.len()];
+            self.validate_transaction(spent_utxos, transaction)?;
+        }
+        Ok(())
+    }
+    fn connect_body<A>(
+        &mut self,
+        block_number: u32,
+        body: &sdk_types::Body<A, BitNamesOutput>,
+    ) -> Result<(), Self::Error> {
+        for transaction in &body.transactions {
+            for output in &transaction.outputs {
+                match &output.content {
+                    Content::Custom(BitNamesOutput::Reveal { key, value, .. }) => {
+                        self.key_to_value.insert(*key, *value);
+                        println!("key {key} was registered successfuly");
+                    }
+                    _ => {}
                 }
-                _ => {}
             }
         }
         Ok(())
@@ -71,7 +88,7 @@ impl State<BitNamesOutput> for BitNamesState {
 #[derive(Debug, Default)]
 pub struct Utxos<C, S, E> {
     pub utxos: HashMap<OutPoint, sdk_types::Output<C>>,
-    phantom: std::marker::PhantomData<(S, E)>,
+    phantom: std::marker::PhantomData<(C, S, E)>,
 }
 
 impl<C: GetValue + Clone + Serialize, S: State<C>, E: From<S::Error> + From<sdk_types::Error>>
@@ -98,49 +115,46 @@ impl<C: GetValue + Clone + Serialize, S: State<C>, E: From<S::Error> + From<sdk_
         Ok(validate_transaction(&spent_utxos, transaction)?)
     }
 
-    pub fn validate_body<A: GetAddress>(&self, body: &sdk_types::Body<A, C>) -> Result<u64, E> {
-        let spent_utxos: Vec<Vec<sdk_types::Output<C>>> = body
+    pub fn validate_body<A: GetAddress>(
+        &self,
+        state: &S,
+        block_number: u32,
+        body: &sdk_types::Body<A, C>,
+    ) -> Result<u64, E> {
+        let spent_utxos: Vec<sdk_types::Output<C>> = body
             .transactions
             .iter()
-            .map(|transaction| {
+            .flat_map(|transaction| {
                 transaction
                     .inputs
                     .iter()
                     .map(|input| self.utxos[input].clone())
-                    .collect()
             })
             .collect();
-        Ok(validate_body(&spent_utxos, body)?)
-    }
-
-    pub fn connect_transaction(
-        &mut self,
-        state: &mut S,
-        transaction: &sdk_types::Transaction<C>,
-    ) -> Result<(), E> {
-        state.connect_outputs(&transaction.outputs)?;
-        for input in &transaction.inputs {
-            self.utxos.remove(input);
-        }
-        let txid = transaction.txid();
-        for vout in 0..transaction.outputs.len() {
-            let outpoint = OutPoint::Regular {
-                txid,
-                vout: vout as u32,
-            };
-            let output = transaction.outputs[vout].clone();
-            self.utxos.insert(outpoint, output);
-        }
-        Ok(())
+        state.validate_body(spent_utxos.as_slice(), block_number, body)?;
+        Ok(validate_body(spent_utxos.as_slice(), body)?)
     }
 
     pub fn connect_body<A>(
         &mut self,
         state: &mut S,
+        block_number: u32,
         body: &sdk_types::Body<A, C>,
     ) -> Result<(), E> {
+        state.connect_body(block_number, body)?;
         for transaction in &body.transactions {
-            self.connect_transaction(state, transaction)?;
+            for input in &transaction.inputs {
+                self.utxos.remove(input);
+            }
+            let txid = transaction.txid();
+            for vout in 0..transaction.outputs.len() {
+                let outpoint = OutPoint::Regular {
+                    txid,
+                    vout: vout as u32,
+                };
+                let output = transaction.outputs[vout].clone();
+                self.utxos.insert(outpoint, output);
+            }
         }
         Ok(())
     }
@@ -174,6 +188,7 @@ pub enum BitNamesError {
 pub struct BitNamesNode {
     pub utxos: Utxos<BitNamesOutput, BitNamesState, Error>,
     pub state: BitNamesState,
+    pub best_block_number: u32,
 }
 
 impl BitNamesNode {
@@ -182,28 +197,29 @@ impl BitNamesNode {
         Self {
             utxos,
             state: Default::default(),
+            best_block_number: 0,
         }
     }
 
-    pub fn validate_body(&self, body: &Body) -> Result<u64, Error> {
+    pub fn validate_body(&self, block_number: u32, body: &Body) -> Result<u64, Error> {
         verify_authorizations(body)?;
-        self.utxos.validate_body(body)
+        self.utxos.validate_body(&self.state, block_number, body)
     }
 
     pub fn validate_transaction(&self, transaction: &Transaction) -> Result<u64, Error> {
         self.utxos.validate_transaction(&self.state, transaction)
     }
 
-    pub fn connect_transaction(&mut self, transaction: &Transaction) -> Result<(), Error> {
-        println!();
-        println!("--- CONNECTING TRANSACTION {} ---", transaction.txid());
-        println!();
-        self.validate_transaction(transaction)?;
-        self.utxos.connect_transaction(&mut self.state, transaction)
-    }
-
     pub fn connect_body(&mut self, body: &Body) -> Result<(), Error> {
-        self.validate_body(body)?;
-        self.utxos.connect_body(&mut self.state, body)
+        println!();
+        println!(
+            "--- CONNECTING BODY merkle_root = {} ---",
+            body.compute_merkle_root()
+        );
+        println!();
+        self.validate_body(self.best_block_number + 1, body)?;
+        self.best_block_number += 1;
+        self.utxos
+            .connect_body(&mut self.state, self.best_block_number, body)
     }
 }

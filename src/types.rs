@@ -3,7 +3,6 @@ use sdk_authorization_ed25519_dalek::Authorization;
 use sdk_types::*;
 pub use sdk_types::{Address, Content, OutPoint};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BitNamesOutput {
