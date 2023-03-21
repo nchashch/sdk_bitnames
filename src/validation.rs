@@ -16,6 +16,7 @@ impl State<BitNamesOutput> for BitNamesState {
     fn validate_transaction(
         &self,
         spent_utxos: &[Output],
+        block_number: u32,
         transaction: &Transaction,
     ) -> Result<(), Self::Error> {
         let spent_commitments: Vec<Commitment> = spent_utxos
@@ -61,7 +62,7 @@ impl State<BitNamesOutput> for BitNamesState {
         let mut index = 0;
         for transaction in &body.transactions {
             let spent_utxos = &spent_utxos[index..transaction.inputs.len()];
-            self.validate_transaction(spent_utxos, transaction)?;
+            self.validate_transaction(spent_utxos, block_number, transaction)?;
         }
         Ok(())
     }
@@ -104,6 +105,7 @@ impl<C: GetValue + Clone + Serialize, S: State<C>, E: From<S::Error> + From<sdk_
     pub fn validate_transaction(
         &self,
         state: &S,
+        block_number: u32,
         transaction: &sdk_types::Transaction<C>,
     ) -> Result<u64, E> {
         let spent_utxos: Vec<sdk_types::Output<C>> = transaction
@@ -111,7 +113,7 @@ impl<C: GetValue + Clone + Serialize, S: State<C>, E: From<S::Error> + From<sdk_
             .iter()
             .map(|input| self.utxos[input].clone())
             .collect();
-        state.validate_transaction(&spent_utxos, transaction)?;
+        state.validate_transaction(&spent_utxos, block_number, transaction)?;
         Ok(validate_transaction(&spent_utxos, transaction)?)
     }
 
@@ -207,7 +209,9 @@ impl BitNamesNode {
     }
 
     pub fn validate_transaction(&self, transaction: &Transaction) -> Result<u64, Error> {
-        self.utxos.validate_transaction(&self.state, transaction)
+        // Will this transaction be valid, if included in next block?
+        self.utxos
+            .validate_transaction(&self.state, self.best_block_number + 1, transaction)
     }
 
     pub fn connect_body(&mut self, body: &Body) -> Result<(), Error> {
