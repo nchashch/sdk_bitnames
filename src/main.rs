@@ -43,20 +43,17 @@ fn main() {
                 content: Content::Custom(BitNamesOutput::Commitment(commitment)),
             },
         ];
-        let unsigned_transaction = Transaction {
-            inputs,
-            outputs,
-            authorizations: vec![],
-        };
+        dbg!(&inputs);
+        let unsigned_transaction = Transaction { inputs, outputs };
         authorize_transaction(&keypairs, &spent_utxos, unsigned_transaction)
     };
+    let body = Body::new(vec![commitment_transaction.clone()], vec![]);
+    dbg!(&node, &body);
+    node.connect_body(&body).unwrap();
 
-    dbg!(&node);
-    node.connect_transaction(&commitment_transaction).unwrap();
-
-    let name_transaction = {
+    let reveal_transaction = {
         let commitment_outpoint = OutPoint::Regular {
-            txid: commitment_transaction.txid(),
+            txid: commitment_transaction.transaction.txid(),
             vout: 1,
         };
         let spent_utxos = vec![node.utxos.utxos[&commitment_outpoint].clone()];
@@ -66,15 +63,12 @@ fn main() {
             address: addresses[2],
             content: Content::Custom(BitNamesOutput::Reveal { salt, key, value }),
         }];
-        let unsigned_transaction = Transaction {
-            inputs,
-            outputs,
-            authorizations: vec![],
-        };
+        let unsigned_transaction = Transaction { inputs, outputs };
         authorize_transaction(&keypairs, &spent_utxos, unsigned_transaction)
     };
-    dbg!(&node);
-    node.connect_transaction(&name_transaction).unwrap();
+    let body = Body::new(vec![reveal_transaction], vec![]);
+    dbg!(&node, &body);
+    node.connect_body(&body).unwrap();
     dbg!(&node);
 
     let mut nameserver = NameServer::default();

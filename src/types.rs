@@ -12,7 +12,8 @@ pub enum BitNamesOutput {
 }
 
 pub type Output = sdk_types::Output<BitNamesOutput>;
-pub type Transaction = sdk_types::Transaction<Authorization, BitNamesOutput>;
+pub type Transaction = sdk_types::Transaction<BitNamesOutput>;
+pub type AuthorizedTransaction = sdk_types::AuthorizedTransaction<Authorization, BitNamesOutput>;
 pub type Body = sdk_types::Body<Authorization, BitNamesOutput>;
 
 impl GetValue for BitNamesOutput {

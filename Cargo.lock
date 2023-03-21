@@ -349,6 +349,7 @@ dependencies = [
 name = "sdk_authorization_ed25519_dalek"
 version = "0.1.0"
 dependencies = [
+ "bincode",
  "ed25519-dalek",
  "sdk_types",
  "serde",
