@@ -38,11 +38,13 @@ pub enum BitNamesError {
         commitment: Commitment,
         late_by: u32,
     },
+    #[error("invalid key {key}")]
+    InvalidKey { key: Key },
 }
 
 #[derive(Debug, Default)]
 pub struct BitNamesState {
-    pub key_to_value: HashMap<Key, Value>,
+    pub key_to_value: HashMap<Key, Option<Value>>,
     pub commitment_to_height: HashMap<Commitment, u32>,
     pub commitment_to_outpoint: HashMap<Commitment, OutPoint>,
     // Height of the oldest commitment used to claim this key.
@@ -97,6 +99,14 @@ impl BitNamesState {
                 _ => None,
             })
             .collect();
+        let spent_keys: HashSet<Key> = spent_utxos
+            .iter()
+            .filter_map(|utxo| match utxo.content {
+                Content::Custom(BitNamesOutput::Reveal { key, .. }) => Some(key),
+                Content::Custom(BitNamesOutput::KeyValue { key, .. }) => Some(key),
+                _ => None,
+            })
+            .collect();
         for commitment in &spent_commitments {
             let height = self.get_commitment_height(commitment)?;
             if block_height - height > COMMITMENT_MAX_AGE {
@@ -110,30 +120,38 @@ impl BitNamesState {
             .outputs
             .iter()
             .filter_map(|output| match output.content {
-                Content::Custom(BitNamesOutput::Reveal { salt, key, value }) => {
-                    Some((salt, key, value))
-                }
+                Content::Custom(BitNamesOutput::Reveal { salt, key }) => Some((salt, key)),
                 _ => None,
             });
-        for (salt, key, _) in name_outputs {
-            let commitment = blake2b_hmac(&key, salt);
-            if !spent_commitments.contains(&commitment) {
-                return Err(BitNamesError::InvalidNameCommitment {
-                    key,
-                    salt,
-                    commitment,
-                });
-            }
-            if self.key_to_value.contains_key(&key) {
-                let commitment_height = self.get_commitment_height(&commitment)?;
-                let prev_commitment_height = self.get_key_height(&key)?;
-                if prev_commitment_height < commitment_height {
-                    return Err(BitNamesError::KeyAlreadyRegistered {
-                        key,
-                        prev_commitment_height,
-                        commitment_height,
-                    });
+        for output in &transaction.outputs {
+            match output.content {
+                Content::Custom(BitNamesOutput::Reveal { salt, key }) => {
+                    let commitment = blake2b_hmac(&key, salt);
+                    if !spent_commitments.contains(&commitment) {
+                        return Err(BitNamesError::InvalidNameCommitment {
+                            key,
+                            salt,
+                            commitment,
+                        });
+                    }
+                    if self.key_to_value.contains_key(&key) {
+                        let commitment_height = self.get_commitment_height(&commitment)?;
+                        let prev_commitment_height = self.get_key_height(&key)?;
+                        if prev_commitment_height < commitment_height {
+                            return Err(BitNamesError::KeyAlreadyRegistered {
+                                key,
+                                prev_commitment_height,
+                                commitment_height,
+                            });
+                        }
+                    }
                 }
+                Content::Custom(BitNamesOutput::KeyValue { key, value }) => {
+                    if !spent_keys.contains(&key) {
+                        return Err(BitNamesError::InvalidKey { key });
+                    }
+                }
+                _ => {}
             }
         }
         Ok(())
@@ -158,6 +176,7 @@ impl BitNamesState {
             },
         )
     }
+
     pub fn validate_transaction(&self, transaction: &Transaction) -> Result<u64, Error> {
         // Will this transaction be valid, if included in next block?
         let spent_utxos: Vec<Output> = transaction
@@ -191,11 +210,14 @@ impl BitNamesState {
                 };
                 let output = transaction.outputs[vout].clone();
                 match &output.content {
-                    Content::Custom(BitNamesOutput::Reveal { key, value, salt }) => {
+                    Content::Custom(BitNamesOutput::KeyValue { key, value }) => {
+                        self.key_to_value.insert(*key, Some(*value));
+                    }
+                    Content::Custom(BitNamesOutput::Reveal { key, salt }) => {
                         let commitment = blake2b_hmac(key, *salt);
                         self.key_to_commitment.insert(*key, commitment);
                         self.commitment_to_key.insert(commitment, *key);
-                        self.key_to_value.insert(*key, *value);
+                        self.key_to_value.insert(*key, None);
                         println!("key {key} was registered successfuly");
                     }
                     Content::Custom(BitNamesOutput::Commitment(commitment)) => {

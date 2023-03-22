@@ -43,7 +43,6 @@ fn main() -> Result<()> {
                 content: Content::Custom(BitNamesOutput::Commitment(commitment)),
             },
         ];
-        dbg!(&inputs);
         let unsigned_transaction = Transaction { inputs, outputs };
         authorize_transaction(&keypairs, &spent_utxos, unsigned_transaction)
     };
@@ -61,16 +60,32 @@ fn main() -> Result<()> {
         let wrong_key: Key = hash(&"NyTimes.com").into();
         let outputs = vec![Output {
             address: addresses[2],
-            content: Content::Custom(BitNamesOutput::Reveal { salt, key, value }),
+            content: Content::Custom(BitNamesOutput::Reveal { salt, key }),
         }];
         let unsigned_transaction = Transaction { inputs, outputs };
         authorize_transaction(&keypairs, &spent_utxos, unsigned_transaction)
     };
-    let body = Body::new(vec![reveal_transaction], vec![]);
+
+    let body = Body::new(vec![reveal_transaction.clone()], vec![]);
     dbg!(&state, &body);
     state.connect_body(&body)?;
 
-    let body = Body::new(vec![], vec![]);
+    let key_value_transaction = {
+        let reveal_outpoint = OutPoint::Regular {
+            txid: reveal_transaction.transaction.txid(),
+            vout: 0,
+        };
+        let spent_utxos = vec![state.utxos[&reveal_outpoint].clone()];
+        let inputs = vec![reveal_outpoint];
+        let outputs = vec![Output {
+            address: addresses[3],
+            content: Content::Custom(BitNamesOutput::KeyValue { key, value }),
+        }];
+        let unsigned_transaction = Transaction { inputs, outputs };
+        authorize_transaction(&keypairs, &spent_utxos, unsigned_transaction)
+    };
+
+    let body = Body::new(vec![key_value_transaction], vec![]);
     dbg!(&state, &body);
     state.connect_body(&body)?;
 
@@ -79,7 +94,9 @@ fn main() -> Result<()> {
     nameserver
         .store(&state, "nytimes.com", "151.101.193.164")
         .unwrap();
-    let value = nameserver.lookup(&state, "nytimes.com").unwrap();
-    dbg!(value);
+    let name = "nytimes.com";
+    println!("looking up {name}");
+    let value = nameserver.lookup(&state, name).unwrap();
+    println!("value = {value}");
     Ok(())
 }
