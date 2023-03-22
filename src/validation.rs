@@ -95,7 +95,6 @@ impl BitNamesState {
             })
             .collect();
         for commitment in &spent_commitments {
-            dbg!(&self.commitment_height);
             let height = self.get_commitment_height(commitment)?;
             if block_height - height > COMMITMENT_MAX_AGE {
                 return Err(BitNamesError::RevealTooLate {
