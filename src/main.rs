@@ -69,8 +69,12 @@ fn main() -> Result<()> {
     let body = Body::new(vec![reveal_transaction], vec![]);
     dbg!(&state, &body);
     state.connect_body(&body)?;
-    dbg!(&state);
 
+    let body = Body::new(vec![], vec![]);
+    dbg!(&state, &body);
+    state.connect_body(&body)?;
+
+    dbg!(&state);
     let mut nameserver = NameServer::default();
     nameserver
         .store(&state, "nytimes.com", "151.101.193.164")

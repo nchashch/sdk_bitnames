@@ -14,7 +14,7 @@ pub enum Error {
     BitNames(#[from] BitNamesError),
 }
 
-const COMMITMENT_MAX_AGE: u32 = 10;
+const COMMITMENT_MAX_AGE: u32 = 1;
 #[derive(Debug, thiserror::Error)]
 pub enum BitNamesError {
     #[error("invalid name commitment")]
@@ -43,9 +43,12 @@ pub enum BitNamesError {
 #[derive(Debug, Default)]
 pub struct BitNamesState {
     pub key_to_value: HashMap<Key, Value>,
-    pub commitment_height: HashMap<Commitment, u32>,
+    pub commitment_to_height: HashMap<Commitment, u32>,
+    pub commitment_to_outpoint: HashMap<Commitment, OutPoint>,
     // Height of the oldest commitment used to claim this key.
-    pub key_height: HashMap<Key, u32>,
+    pub key_to_commitment: HashMap<Key, Commitment>,
+    pub commitment_to_key: HashMap<Commitment, Key>,
+
     pub utxos: HashMap<OutPoint, Output>,
     pub best_block_height: u32,
 }
@@ -137,19 +140,23 @@ impl BitNamesState {
     }
 
     fn get_commitment_height(&self, commitment: &Commitment) -> Result<u32, BitNamesError> {
-        self.commitment_height
-            .get(commitment)
-            .copied()
-            .ok_or(BitNamesError::CommitmentNotFound {
+        self.commitment_to_height.get(commitment).copied().ok_or(
+            BitNamesError::CommitmentNotFound {
                 commitment: *commitment,
-            })
+            },
+        )
     }
 
     fn get_key_height(&self, key: &Key) -> Result<u32, BitNamesError> {
-        self.key_height
+        let commitment = self
+            .key_to_commitment
             .get(key)
-            .copied()
-            .ok_or(BitNamesError::KeyNotFound { key: *key })
+            .ok_or(BitNamesError::KeyNotFound { key: *key })?;
+        self.commitment_to_height.get(commitment).copied().ok_or(
+            BitNamesError::CommitmentNotFound {
+                commitment: *commitment,
+            },
+        )
     }
     pub fn validate_transaction(&self, transaction: &Transaction) -> Result<u64, Error> {
         // Will this transaction be valid, if included in next block?
@@ -172,16 +179,6 @@ impl BitNamesState {
         self.validate_body(self.best_block_height + 1, body)?;
         self.best_block_height += 1;
 
-        let spent_utxos: Vec<Output> = body
-            .transactions
-            .iter()
-            .flat_map(|transaction| {
-                transaction
-                    .inputs
-                    .iter()
-                    .map(|input| self.utxos[input].clone())
-            })
-            .collect();
         for transaction in &body.transactions {
             for input in &transaction.inputs {
                 self.utxos.remove(input);
@@ -196,30 +193,46 @@ impl BitNamesState {
                 match &output.content {
                     Content::Custom(BitNamesOutput::Reveal { key, value, salt }) => {
                         let commitment = blake2b_hmac(key, *salt);
-                        let commitment_height = self.get_commitment_height(&commitment)?;
-                        self.key_height.insert(*key, commitment_height);
+                        self.key_to_commitment.insert(*key, commitment);
+                        self.commitment_to_key.insert(commitment, *key);
                         self.key_to_value.insert(*key, *value);
                         println!("key {key} was registered successfuly");
                     }
                     Content::Custom(BitNamesOutput::Commitment(commitment)) => {
-                        self.commitment_height
+                        self.commitment_to_height
                             .insert(*commitment, self.best_block_height);
+                        self.commitment_to_outpoint.insert(*commitment, outpoint);
                     }
                     _ => {}
                 }
                 self.utxos.insert(outpoint, output);
             }
         }
-        for spent_utxo in &spent_utxos {
-            match &spent_utxo.content {
-                Content::Custom(BitNamesOutput::Commitment(commitment)) => {
-                    self.commitment_height.remove(commitment);
+        let expired_commitments: Vec<Commitment> = self
+            .commitment_to_height
+            .iter()
+            .filter_map(|(commitment, height)| {
+                if self.best_block_height - height > COMMITMENT_MAX_AGE {
+                    Some(commitment)
+                } else {
+                    None
                 }
-                Content::Custom(BitNamesOutput::Reveal { key, .. }) => {
-                    self.key_to_value.remove(key);
-                }
-                _ => {}
+            })
+            .copied()
+            .collect();
+        for commitment in &expired_commitments {
+            if let Some(key) = self.commitment_to_key.get(commitment) {
+                self.key_to_commitment.remove(key);
+                self.commitment_to_key.remove(commitment);
             }
+            let outpoint = self.commitment_to_outpoint.get(commitment).ok_or(
+                BitNamesError::CommitmentNotFound {
+                    commitment: *commitment,
+                },
+            )?;
+            self.utxos.remove(outpoint);
+            self.commitment_to_height.remove(commitment);
+            self.commitment_to_outpoint.remove(commitment);
         }
 
         Ok(())
