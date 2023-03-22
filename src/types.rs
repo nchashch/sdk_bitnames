@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 pub enum BitNamesOutput {
     Commitment(Commitment),
     Reveal { salt: u64, key: Key },
-    KeyValue { key: Key, value: Value },
+    KeyValue { key: Key, value: Option<Value> },
 }
 
 pub type Output = sdk_types::Output<BitNamesOutput>;

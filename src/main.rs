@@ -79,7 +79,10 @@ fn main() -> Result<()> {
         let inputs = vec![reveal_outpoint];
         let outputs = vec![Output {
             address: addresses[3],
-            content: Content::Custom(BitNamesOutput::KeyValue { key, value }),
+            content: Content::Custom(BitNamesOutput::KeyValue {
+                key,
+                value: Some(value),
+            }),
         }];
         let unsigned_transaction = Transaction { inputs, outputs };
         authorize_transaction(&keypairs, &spent_utxos, unsigned_transaction)
@@ -94,6 +97,9 @@ fn main() -> Result<()> {
     nameserver
         .store(&state, "nytimes.com", "151.101.193.164")
         .unwrap();
+
+    dbg!(&nameserver);
+
     let name = "nytimes.com";
     println!("looking up {name}");
     let value = nameserver.lookup(&state, name).unwrap();

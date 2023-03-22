@@ -211,7 +211,7 @@ impl BitNamesState {
                 let output = transaction.outputs[vout].clone();
                 match &output.content {
                     Content::Custom(BitNamesOutput::KeyValue { key, value }) => {
-                        self.key_to_value.insert(*key, Some(*value));
+                        self.key_to_value.insert(*key, *value);
                     }
                     Content::Custom(BitNamesOutput::Reveal { key, salt }) => {
                         let commitment = blake2b_hmac(key, *salt);
