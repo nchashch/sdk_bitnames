@@ -17,3 +17,4 @@ sdk_authorization_ed25519_dalek = { path = "../sdk_authorization_ed25519_dalek" 
 serde = "1.0.157"
 thiserror = "1.0.40"
 anyhow = "1.0.70"
+heed = { git = "https://github.com/meilisearch/heed", tag = "v0.12.4" }

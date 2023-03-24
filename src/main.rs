@@ -15,6 +15,9 @@ use types::*;
 use validation::*;
 
 fn main() -> Result<()> {
+    let env = new_env();
+    let mut state = BitNamesState::new(&env)?;
+
     const NUM_KEYPAIRS: usize = 10;
     const NUM_DEPOSITS: usize = 2;
     const DEPOSIT_VALUE: u64 = 100;
@@ -30,7 +33,8 @@ fn main() -> Result<()> {
     let value: Value = hash(&"151.101.193.164").into();
     let salt: u64 = Faker.fake();
 
-    let mut state = BitNamesState::new(utxos);
+    state.connect_deposits(&utxos)?;
+
     let commitment_transaction = {
         let commitment = blake2b_hmac(&key, salt);
         let outputs = vec![
@@ -44,10 +48,10 @@ fn main() -> Result<()> {
             },
         ];
         let unsigned_transaction = Transaction { inputs, outputs };
+        state.validate_transaction(&unsigned_transaction)?;
         authorize_transaction(&keypairs, &spent_utxos, unsigned_transaction)
     };
     let body = Body::new(vec![commitment_transaction.clone()], vec![]);
-    dbg!(&state, &body);
     state.connect_body(&body)?;
 
     let reveal_transaction = {
@@ -55,19 +59,19 @@ fn main() -> Result<()> {
             txid: commitment_transaction.transaction.txid(),
             vout: 1,
         };
-        let spent_utxos = vec![state.utxos[&commitment_outpoint].clone()];
+        let spent_utxos = vec![state.get_utxo(&commitment_outpoint)?.unwrap()];
         let inputs = vec![commitment_outpoint];
-        let wrong_key: Key = hash(&"NyTimes.com").into();
+        // let wrong_key: Key = hash(&"NyTimes.com").into();
         let outputs = vec![Output {
             address: addresses[2],
             content: Content::Custom(BitNamesOutput::Reveal { salt, key }),
         }];
         let unsigned_transaction = Transaction { inputs, outputs };
+        state.validate_transaction(&unsigned_transaction)?;
         authorize_transaction(&keypairs, &spent_utxos, unsigned_transaction)
     };
 
     let body = Body::new(vec![reveal_transaction.clone()], vec![]);
-    dbg!(&state, &body);
     state.connect_body(&body)?;
 
     let key_value_transaction = {
@@ -75,7 +79,7 @@ fn main() -> Result<()> {
             txid: reveal_transaction.transaction.txid(),
             vout: 0,
         };
-        let spent_utxos = vec![state.utxos[&reveal_outpoint].clone()];
+        let spent_utxos = vec![state.get_utxo(&reveal_outpoint)?.unwrap()];
         let inputs = vec![reveal_outpoint];
         let outputs = vec![Output {
             address: addresses[3],
@@ -85,14 +89,13 @@ fn main() -> Result<()> {
             }),
         }];
         let unsigned_transaction = Transaction { inputs, outputs };
+        state.validate_transaction(&unsigned_transaction)?;
         authorize_transaction(&keypairs, &spent_utxos, unsigned_transaction)
     };
 
     let body = Body::new(vec![key_value_transaction], vec![]);
-    dbg!(&state, &body);
     state.connect_body(&body)?;
 
-    dbg!(&state);
     let mut nameserver = NameServer::default();
     nameserver
         .store(&state, "nytimes.com", "151.101.193.164")
@@ -105,4 +108,16 @@ fn main() -> Result<()> {
     let value = nameserver.lookup(&state, name).unwrap();
     println!("value = {value}");
     Ok(())
+}
+
+fn new_env() -> heed::Env {
+    let env_path = std::path::Path::new("target").join("clear-database.mdb");
+    let _ = std::fs::remove_dir_all(&env_path);
+    std::fs::create_dir_all(&env_path).unwrap();
+    let env = heed::EnvOpenOptions::new()
+        .map_size(10 * 1024 * 1024) // 10MB
+        .max_dbs(6)
+        .open(env_path)
+        .unwrap();
+    env
 }

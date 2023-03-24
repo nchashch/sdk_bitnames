@@ -1,7 +1,7 @@
 pub use sdk_types::hash;
 use serde::{Deserialize, Serialize};
 
-type Hash = [u8; 32];
+pub type Hash = [u8; 32];
 
 #[derive(Clone, Copy, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct Key(Hash);

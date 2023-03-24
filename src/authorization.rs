@@ -1,4 +1,3 @@
-use crate::hashes::hash;
 use crate::types::{AuthorizedTransaction, Output, Transaction};
 use sdk_authorization_ed25519_dalek::{authorize, Keypair};
 use sdk_types::{Address, GetAddress as _};
