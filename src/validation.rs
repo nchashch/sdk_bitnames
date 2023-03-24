@@ -4,44 +4,6 @@ use sdk_authorization_ed25519_dalek::verify_authorizations;
 use sdk_types::{validate_body, validate_transaction, OutPoint};
 use std::collections::{HashMap, HashSet};
 
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("authorization error")]
-    Authorization(#[from] sdk_authorization_ed25519_dalek::Error),
-    #[error("sdk error")]
-    Sdk(#[from] sdk_types::Error),
-    #[error("bitnames error")]
-    BitNames(#[from] BitNamesError),
-}
-
-const COMMITMENT_MAX_AGE: u32 = 1;
-#[derive(Debug, thiserror::Error)]
-pub enum BitNamesError {
-    #[error("invalid name commitment")]
-    InvalidNameCommitment {
-        key: Key,
-        salt: u64,
-        commitment: Commitment,
-    },
-    #[error("key {key} was already registered with an older commitment: prev commitment height {prev_commitment_height} < commitment height {commitment_height}")]
-    KeyAlreadyRegistered {
-        key: Key,
-        prev_commitment_height: u32,
-        commitment_height: u32,
-    },
-    #[error("commitment {commitment} not found")]
-    CommitmentNotFound { commitment: Commitment },
-    #[error("key {key} not found")]
-    KeyNotFound { key: Key },
-    #[error("commitment {commitment} is late by {late_by}")]
-    RevealTooLate {
-        commitment: Commitment,
-        late_by: u32,
-    },
-    #[error("invalid key {key}")]
-    InvalidKey { key: Key },
-}
-
 #[derive(Debug, Default)]
 pub struct BitNamesState {
     pub key_to_value: HashMap<Key, Option<Value>>,
@@ -191,7 +153,7 @@ impl BitNamesState {
     pub fn connect_body(&mut self, body: &Body) -> Result<(), Error> {
         println!();
         println!(
-            "--- CONNECTING BODY merkle_root = {} ---",
+            "--- connectinb body with merkle_root = {} ---",
             body.compute_merkle_root()
         );
         println!();
@@ -259,4 +221,42 @@ impl BitNamesState {
 
         Ok(())
     }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("authorization error")]
+    Authorization(#[from] sdk_authorization_ed25519_dalek::Error),
+    #[error("sdk error")]
+    Sdk(#[from] sdk_types::Error),
+    #[error("bitnames error")]
+    BitNames(#[from] BitNamesError),
+}
+
+const COMMITMENT_MAX_AGE: u32 = 1;
+#[derive(Debug, thiserror::Error)]
+pub enum BitNamesError {
+    #[error("invalid name commitment")]
+    InvalidNameCommitment {
+        key: Key,
+        salt: u64,
+        commitment: Commitment,
+    },
+    #[error("key {key} was already registered with an older commitment: prev commitment height {prev_commitment_height} < commitment height {commitment_height}")]
+    KeyAlreadyRegistered {
+        key: Key,
+        prev_commitment_height: u32,
+        commitment_height: u32,
+    },
+    #[error("commitment {commitment} not found")]
+    CommitmentNotFound { commitment: Commitment },
+    #[error("key {key} not found")]
+    KeyNotFound { key: Key },
+    #[error("commitment {commitment} is late by {late_by}")]
+    RevealTooLate {
+        commitment: Commitment,
+        late_by: u32,
+    },
+    #[error("invalid key {key}")]
+    InvalidKey { key: Key },
 }
